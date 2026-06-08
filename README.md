@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/License-TBD-lightgrey)](#license)
 [![Status](https://img.shields.io/badge/Status-Course%20Project-brightgreen)](#项目状态)
 
-一个面向研究生、科研人员与课程项目场景的学术论文追踪 Agent。用户可以用自然语言描述研究方向、关键词、数据源、时间范围与周期规则，系统会自动从 arXiv 与 Semantic Scholar 获取候选论文，完成去重、排序、摘要生成与 Markdown 简报输出。
+一个面向研究生、科研人员与课程项目场景的学术论文追踪 Agent。用户可以用自然语言描述研究方向、关键词、数据源、时间范围与周期规则，系统会自动从 arXiv、DBLP 与 Semantic Scholar 获取候选论文，完成去重、排序、摘要生成与 Markdown 简报输出。
 
 本项目来源于“BUPT 大语言模型技术及应用”课程实践，重点展示 LLM Agent 在科研信息获取、结构化任务解析、自动化报告生成和周期任务调度中的应用。
 
@@ -34,7 +34,7 @@
 ## 核心能力
 
 - **自然语言任务解析**：将“追踪最近三个月 RAG 方向高影响论文”等自然语言需求解析为结构化 `TaskConfig`。
-- **多数据源论文获取**：支持 arXiv 与 Semantic Scholar，并预留统一 Fetcher 接口便于扩展。
+- **多数据源论文获取**：支持 arXiv、DBLP 与 Semantic Scholar，并预留统一 Fetcher 接口便于扩展。
 - **请求限流与缓存**：对外部 API 采用顺序请求、重试等待与本地缓存策略，降低 429/503 风险。
 - **论文去重**：基于 DOI、外部 ID 与标题稳定键合并重复论文，并保留更有信息量的记录。
 - **多维排序**：支持“最新”“热门”“相关”三类排序视角。
@@ -60,6 +60,7 @@ AcademicTrackerAgent
       │
       ├── Fetchers
       │   ├── arXiv
+      │   ├── DBLP
       │   └── Semantic Scholar
       │
       ├── Rankers
@@ -101,7 +102,7 @@ AcademicTrackerAgent
 | 配置管理 | pydantic-settings, python-dotenv |
 | 数据模型 | Pydantic v2 |
 | HTTP 客户端 | httpx |
-| 学术数据源 | arXiv API, Semantic Scholar API |
+| 学术数据源 | arXiv API, DBLP Search API, Semantic Scholar API |
 | 调度 | APScheduler |
 | 数据存储 | SQLite, SQLAlchemy |
 | 报告格式 | Markdown |
@@ -165,7 +166,7 @@ DEFAULT_MAX_RESULTS=30
 ### 5. 生成第一份简报
 
 ```bash
-python main.py run "帮我追踪大语言模型推理优化方向的论文，关注 arXiv cs.LG 和 Semantic Scholar，最近三个月，每类给我 5 篇" -y
+python main.py run "帮我追踪大语言模型推理优化方向的论文，关注 arXiv cs.LG、dblp:WWW 和 Semantic Scholar，最近三个月，每类给我 5 篇" -y
 ```
 
 生成的 Markdown 报告会保存到 `reports/` 目录。
@@ -330,6 +331,7 @@ data/academic_tracker.db
 │   │   └── settings.py               # 环境变量与全局配置
 │   ├── fetchers/
 │   │   ├── arxiv_fetcher.py          # arXiv 数据源
+│   │   ├── dblp_fetcher.py           # DBLP 数据源
 │   │   ├── base.py                   # Fetcher 抽象接口
 │   │   └── semantic_scholar.py       # Semantic Scholar 数据源
 │   ├── rankers/
@@ -433,7 +435,7 @@ python main.py scheduler
 当前版本适合作为课程项目、科研辅助原型和 Agent 工程实践示例使用。已实现的主要能力包括：
 
 - 自然语言任务解析；
-- arXiv 与 Semantic Scholar 数据获取；
+- arXiv、DBLP 与 Semantic Scholar 数据获取；
 - 论文去重；
 - 最新、热门、相关排序；
 - 中文 Markdown 简报生成；

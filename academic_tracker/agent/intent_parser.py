@@ -17,13 +17,16 @@ class IntentParser:
             {
                 "role": "system",
                 "content": (
-                    "你是学术论文追踪任务配置解析器。请把用户自然语言转换为严格 JSON，字段包括："
-                    "research_direction(str), keywords(list[str]), sources(list[str]), time_range_days(int), "
-                    "schedule(str), categories(list[str]), top_n_per_category(int), venues(list[str])。"
-                    "categories 只能从 latest、popular、relevant 三个英文值中选择；"
-                    "如果用户说每类、三类或没有明确限制，就输出 [\"latest\", \"popular\", \"relevant\"]；"
-                    "不要把研究主题、技术方向或关键词放入 categories。"
-                    "sources 可包含 arxiv、semantic_scholar、arxiv:cs.CL、arxiv:cs.LG 等。"
+                    "你是学术论文追踪任务配置解析器。请把用户自然语言转换为严格 JSON，"
+                    "字段包括：research_direction(str), keywords(list[str]), sources(list[str]), "
+                    "time_range_days(int), schedule(str), categories(list[str]), "
+                    "top_n_per_category(int), venues(list[str])。"
+                    "categories 只能从 latest、popular、relevant 三个英文值中选择。"
+                    "如果用户说每类、三类或没有明确限制，就输出 "
+                    "[\"latest\", \"popular\", \"relevant\"]。"
+                    "不要把研究主题、技术方向或关键词放进 categories。"
+                    "sources 可包含 arxiv、dblp、semantic_scholar、arxiv:cs.CL、"
+                    "arxiv:cs.LG、dblp:KDD、dblp:WWW 等。"
                     "只输出 JSON，不要输出解释。"
                 ),
             },
@@ -37,13 +40,14 @@ class IntentParser:
 
     def _fallback_parse(self, user_text: str) -> TaskConfig:
         keywords = []
-        for sep in ["，", ",", "、", " "]:
+        for sep in ["，", ",", "。", " "]:
             if sep in user_text:
                 keywords = [item.strip() for item in user_text.split(sep) if 2 <= len(item.strip()) <= 40]
                 break
         if not keywords:
             keywords = [user_text.strip()]
-        sources = ["arxiv", "semantic_scholar"]
+
+        sources = ["arxiv", "dblp", "semantic_scholar"]
         if "cs.CL" in user_text or "自然语言" in user_text or "NLP" in user_text.upper():
             sources.append("arxiv:cs.CL")
         if "cs.LG" in user_text or "机器学习" in user_text:

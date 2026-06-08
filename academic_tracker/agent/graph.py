@@ -6,6 +6,7 @@ from academic_tracker.agent.intent_parser import IntentParser
 from academic_tracker.agent.report_generator import ReportGenerator
 from academic_tracker.config.settings import get_settings
 from academic_tracker.fetchers.arxiv_fetcher import ArxivFetcher
+from academic_tracker.fetchers.dblp_fetcher import DblpFetcher
 from academic_tracker.fetchers.semantic_scholar import SemanticScholarFetcher
 from academic_tracker.rankers.latest import LatestRanker
 from academic_tracker.rankers.popular import PopularRanker
@@ -21,6 +22,7 @@ class AcademicTrackerAgent:
         self.report_generator = ReportGenerator()
         self.fetchers = {
             "arxiv": ArxivFetcher(),
+            "dblp": DblpFetcher(),
             "semantic_scholar": SemanticScholarFetcher(),
         }
         self.db = get_database()

@@ -24,7 +24,7 @@
 ┌──────────────────────────▼──────────────────────────────────────┐
 │                       数据获取层                                  │
 │   ┌──────────┐  ┌──────────────────┐  ┌──────────┐             │
-│   │  arXiv   │  │ Semantic Scholar  │  │ CrossRef │  ...        │
+│   │  arXiv   │  │ DBLP              │  │ Semantic Scholar  │
 │   └──────────┘  └──────────────────┘  └──────────┘             │
 └──────────────────────────┬──────────────────────────────────────┘
                            │
@@ -58,7 +58,7 @@
 {
   "research_direction": "大语言模型推理优化",
   "keywords": ["LLM inference", "reasoning optimization", "efficient inference"],
-  "sources": ["arxiv:cs.LG", "NeurIPS", "ICML"],
+  "sources": ["arxiv:cs.LG", "dblp:KDD", "semantic_scholar"],
   "time_range_days": 90,
   "schedule": "每周一 08:00",
   "categories": ["latest", "popular", "relevant"],
@@ -77,6 +77,7 @@
 | 数据源 | API | 获取内容 |
 |--------|-----|---------|
 | arXiv | arXiv API (免费) | 预印本，cs/physics/math 等 |
+| DBLP | DBLP Search API (免费) | 会议/期刊元数据、DOI、venue |
 | Semantic Scholar | S2 API (免费) | 引用数、影响力、摘要 |
 | CrossRef | CrossRef REST API | DOI、期刊、会议论文 |
 | PubMed | NCBI E-utilities | 生物医学领域 |
@@ -218,6 +219,7 @@ academic_tracker/
 │   ├── __init__.py
 │   ├── base.py                  # BaseFetcher 抽象类
 │   ├── arxiv_fetcher.py         # arXiv API 封装
+│   ├── dblp_fetcher.py          # DBLP Search API 封装
 │   ├── semantic_scholar.py      # Semantic Scholar API 封装
 │   └── crossref_fetcher.py      # CrossRef API 封装
 │
@@ -263,7 +265,7 @@ academic_tracker/
 | 任务调度 | APScheduler | 定时任务 |
 | HTTP 客户端 | httpx (异步) | 并发 API 请求 |
 | 数据验证 | Pydantic v2 | 数据模型与校验 |
-| 论文数据源 | arXiv API, Semantic Scholar API, CrossRef API | 免费，无需注册 |
+| 论文数据源 | arXiv API, DBLP Search API, Semantic Scholar API, CrossRef API | 免费，无需注册 |
 | 测试 | pytest + pytest-asyncio | 单元测试 |
 
 ---
@@ -277,7 +279,7 @@ academic_tracker/
    → TaskConfig(keywords=["RAG","retrieval augmented generation"], schedule="weekly", ...)
 
 2. 定时触发 → fetch_papers 并发请求
-   → arXiv 返回 50 篇 + Semantic Scholar 返回 30 篇 → 去重后 60 篇
+   → arXiv 返回 50 篇 + DBLP 返回 30 篇 + Semantic Scholar 返回 30 篇 → 去重后 60 篇
 
 3. rank_papers 三路并行
    → Latest:   按日期取 Top 5
@@ -346,7 +348,7 @@ academic_tracker/
 
 | 阶段 | 内容 | 预计工时 |
 |------|------|---------|
-| Phase 1 | 数据模型 + arXiv/Semantic Scholar Fetcher + 基础排序 | 1 天 |
+| Phase 1 | 数据模型 + arXiv/DBLP/Semantic Scholar Fetcher + 基础排序 | 1 天 |
 | Phase 2 | LangGraph Agent 工作流 + 意图解析 + 报告生成 | 1.5 天 |
 | Phase 3 | 向量相关性排序 + ChromaDB 集成 | 0.5 天 |
 | Phase 4 | APScheduler 定时任务 + SQLite 持久化 | 0.5 天 |

@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 class TaskConfig(BaseModel):
     research_direction: str = Field(..., description="用户关注的研究方向")
     keywords: list[str] = Field(default_factory=list)
-    sources: list[str] = Field(default_factory=lambda: ["arxiv", "semantic_scholar"])
+    sources: list[str] = Field(default_factory=lambda: ["arxiv", "dblp", "semantic_scholar"])
     time_range_days: int = 30
     schedule: str = "manual"
     categories: list[str] = Field(default_factory=lambda: ["latest", "popular", "relevant"])
