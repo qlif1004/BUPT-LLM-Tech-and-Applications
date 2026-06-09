@@ -19,6 +19,26 @@
         <article class="markdown-body">{{ report_html | safe }}</article>
       </section>
 
+      {% if comparison %}
+      <section class="panel comparison-panel">
+        <div class="panel-head">
+          <h2>历史增量追踪</h2>
+          {% if comparison.previous_report_id %}
+          <p>对比上一期报告 #{{ comparison.previous_report_id }}，生成时间：{{ comparison.previous_created_at or "未知" }}</p>
+          {% else %}
+          <p>当前报告是该方向的第一期对比基线。</p>
+          {% endif %}
+        </div>
+        <div class="comparison-stats">
+          <div><strong>{{ comparison.current_total }}</strong><span>本期入选</span></div>
+          <div><strong>{{ comparison.previous_total }}</strong><span>上期入选</span></div>
+          <div><strong>{{ comparison.new_papers|length }}</strong><span>新增论文</span></div>
+          <div><strong>{{ comparison.continuing_papers|length }}</strong><span>延续关注</span></div>
+          <div><strong>{{ comparison.dropped_papers|length }}</strong><span>本期退出</span></div>
+        </div>
+      </section>
+      {% endif %}
+
       <section class="panel">
         <div class="panel-head">
           <h2>原始 Markdown</h2>

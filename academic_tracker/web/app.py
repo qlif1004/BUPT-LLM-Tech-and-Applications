@@ -89,6 +89,7 @@ def create_app(
                 "created_at": record.created_at.strftime("%Y-%m-%d %H:%M"),
                 "report_html": _render_markdown(record.markdown),
                 "markdown": record.markdown,
+                "comparison": _comparison_payload(_report_from_record(record)),
             },
         )
 
@@ -108,6 +109,7 @@ def create_app(
             "report_path": str(report_path),
             "report_markdown": report.markdown,
             "report_html": _render_markdown(report.markdown),
+            "comparison": _comparison_payload(report),
         }
 
     @app.post("/api/tasks")
@@ -202,8 +204,25 @@ def _serialize_execution_result(result: TaskExecutionResult) -> dict[str, Any]:
         "report_markdown": result.report.markdown,
         "report_html": _render_markdown(result.report.markdown),
         "config": result.report.task_config.model_dump(),
+        "comparison": _comparison_payload(result.report),
     }
 
 
 def _render_markdown(text: str) -> str:
     return markdown(text, extensions=["extra", "nl2br", "sane_lists"])
+
+
+def _report_from_record(record: Any) -> Report | None:
+    payload = getattr(record, "payload", "")
+    if not payload:
+        return None
+    try:
+        return Report.model_validate_json(payload)
+    except ValueError:
+        return None
+
+
+def _comparison_payload(report: Report | None) -> dict[str, Any] | None:
+    if report is None or report.comparison is None:
+        return None
+    return report.comparison.model_dump(mode="json")

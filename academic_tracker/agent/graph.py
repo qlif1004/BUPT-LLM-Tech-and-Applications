@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 
 from academic_tracker.agent.intent_parser import IntentParser
+from academic_tracker.agent.report_comparison import attach_comparison_section, compare_with_previous_report
 from academic_tracker.agent.report_generator import ReportGenerator
 from academic_tracker.config.settings import get_settings
 from academic_tracker.fetchers.arxiv_fetcher import ArxivFetcher
@@ -48,6 +49,9 @@ class AcademicTrackerAgent:
         all_summaries = self._merge_summaries([latest, popular, relevant])
         overview = await self.report_generator.generate_overview(config, all_summaries)
         report = self.report_generator.format_report(config, latest, popular, relevant, overview)
+        previous_report = self.db.get_latest_report_by_direction(config.research_direction)
+        comparison = compare_with_previous_report(report, previous_report)
+        report = attach_comparison_section(report, comparison)
         if save_report_record:
             self.db.save_report(report)
         return report

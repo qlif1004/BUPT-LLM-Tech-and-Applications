@@ -299,6 +299,40 @@ th {
   background: linear-gradient(180deg, #fffdf8 0%, #fbf7ef 100%);
 }
 
+.comparison-panel {
+  margin: 18px 0;
+}
+
+.comparison-stats {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.comparison-stats div {
+  min-width: 0;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(20, 92, 82, 0.08);
+  border: 1px solid rgba(20, 92, 82, 0.12);
+}
+
+.comparison-stats strong,
+.comparison-stats span {
+  display: block;
+}
+
+.comparison-stats strong {
+  font-size: 1.45rem;
+  color: var(--accent-strong);
+}
+
+.comparison-stats span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 @keyframes fade-up {
   from {
     opacity: 0;
@@ -315,7 +349,8 @@ th {
   .report-hero,
   .two-up,
   .three-up,
-  .result-grid {
+  .result-grid,
+  .comparison-stats {
     grid-template-columns: 1fr;
   }
 

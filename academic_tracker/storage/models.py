@@ -93,6 +93,28 @@ class PaperSummary(BaseModel):
     category_labels: list[str] = Field(default_factory=list)
 
 
+class TrendPaper(BaseModel):
+    title: str
+    url: str = ""
+    source: str = "unknown"
+    categories: list[str] = Field(default_factory=list)
+    published_date: datetime | None = None
+
+
+class ReportComparison(BaseModel):
+    previous_report_id: int | None = None
+    previous_created_at: datetime | None = None
+    current_total: int = 0
+    previous_total: int = 0
+    new_papers: list[TrendPaper] = Field(default_factory=list)
+    continuing_papers: list[TrendPaper] = Field(default_factory=list)
+    dropped_papers: list[TrendPaper] = Field(default_factory=list)
+
+    @property
+    def has_previous(self) -> bool:
+        return self.previous_report_id is not None or self.previous_created_at is not None
+
+
 class Report(BaseModel):
     task_config: TaskConfig
     latest: list[PaperSummary] = Field(default_factory=list)
@@ -101,3 +123,4 @@ class Report(BaseModel):
     overview: str = ""
     markdown: str = ""
     created_at: datetime = Field(default_factory=datetime.now)
+    comparison: ReportComparison | None = None

@@ -138,6 +138,15 @@ class Database:
         with self.SessionLocal() as session:
             return session.get(ReportRecord, report_id)
 
+    def get_latest_report_by_direction(self, research_direction: str) -> ReportRecord | None:
+        with self.SessionLocal() as session:
+            return (
+                session.query(ReportRecord)
+                .filter_by(research_direction=research_direction)
+                .order_by(ReportRecord.created_at.desc())
+                .first()
+            )
+
     def start_task_run(self, task_id: int) -> int:
         with self.SessionLocal() as session:
             record = TaskRunRecord(task_id=task_id, status="running")
