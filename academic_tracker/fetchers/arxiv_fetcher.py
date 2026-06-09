@@ -20,6 +20,7 @@ class ArxivFetcher(BaseFetcher):
     name = "arxiv"
     base_url = "https://export.arxiv.org/api/query"
     retry_wait_seconds = 8.0
+    max_retry_times = 3
 
     async def fetch(self, config: TaskConfig, max_results: int = 30) -> list[Paper]:
         query = self._build_query(config)
@@ -85,7 +86,7 @@ class ArxivFetcher(BaseFetcher):
 
     async def _get_with_retry(self, client: httpx.AsyncClient, url: str) -> httpx.Response:
         last_error: Exception | None = None
-        for attempt in range(5):
+        for attempt in range(self.max_retry_times):
             try:
                 response = await client.get(url)
                 if response.status_code in {429, 503}:

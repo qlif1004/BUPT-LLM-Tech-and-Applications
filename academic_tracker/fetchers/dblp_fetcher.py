@@ -20,6 +20,7 @@ class DblpFetcher(BaseFetcher):
     base_url = "https://dblp.org/search/publ/api"
     semantic_scholar_batch_url = "https://api.semanticscholar.org/graph/v1/paper/batch"
     retry_wait_seconds = 8.0
+    max_retry_times = 3
 
     async def fetch(self, config: TaskConfig, max_results: int = 30) -> list[Paper]:
         params = {
@@ -262,7 +263,7 @@ class DblpFetcher(BaseFetcher):
     async def _get_with_retry(self, client: httpx.AsyncClient, params: dict[str, Any]) -> httpx.Response:
         last_error: Exception | None = None
         last_response: httpx.Response | None = None
-        for attempt in range(5):
+        for attempt in range(self.max_retry_times):
             try:
                 response = await client.get(self.base_url, params=params)
             except httpx.TimeoutException as exc:
