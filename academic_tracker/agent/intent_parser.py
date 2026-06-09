@@ -35,7 +35,7 @@ class IntentParser:
         try:
             data = await self.llm.json_chat(messages)
             return TaskConfig.model_validate(data)
-        except Exception:
+        except (ValidationError, ValueError, RuntimeError):
             return self._fallback_parse(user_text)
 
     def _fallback_parse(self, user_text: str) -> TaskConfig:
