@@ -18,6 +18,7 @@ from academic_tracker.storage.models import Paper, TaskConfig
 class DblpFetcher(BaseFetcher):
     name = "dblp"
     base_url = "https://dblp.org/search/publ/api"
+    semantic_scholar_batch_url = "https://api.semanticscholar.org/graph/v1/paper/batch"
     retry_wait_seconds = 8.0
 
     async def fetch(self, config: TaskConfig, max_results: int = 30) -> list[Paper]:
@@ -39,7 +40,8 @@ class DblpFetcher(BaseFetcher):
                 response.raise_for_status()
             payload = response.json()
             self._write_cache(cache_key, payload)
-        return self._parse_payload(payload, config)
+        papers = self._parse_payload(payload, config)
+        return await self._enrich_with_semantic_scholar(papers)
 
     def _build_query(self, config: TaskConfig) -> str:
         english_terms: list[str] = []
@@ -106,8 +108,123 @@ class DblpFetcher(BaseFetcher):
                 "pages": self._clean_text(info.get("pages")),
                 "type": self._clean_text(info.get("type")),
                 "access": self._clean_text(info.get("access")),
+                "metadata_enriched": False,
             },
         )
+
+    async def _enrich_with_semantic_scholar(self, papers: list[Paper]) -> list[Paper]:
+        targets = [paper for paper in papers if self._needs_enrichment(paper)]
+        if not targets:
+            return papers
+
+        settings = get_settings()
+        headers = {"User-Agent": "academic-tracker-course-demo/1.0"}
+        if settings.semantic_scholar_api_key:
+            headers["x-api-key"] = settings.semantic_scholar_api_key
+
+        for batch in self._chunks(targets, size=20):
+            ids = [self._semantic_scholar_id(paper) for paper in batch]
+            cache_key = json.dumps({"ids": ids}, ensure_ascii=False, sort_keys=True)
+            cached = self._read_enrichment_cache(cache_key, ttl_seconds=24 * 60 * 60)
+            if cached is not None:
+                data = cached
+            else:
+                params = {
+                    "fields": "title,abstract,authors,year,citationCount,url,externalIds,venue,publicationDate",
+                }
+                try:
+                    async with httpx.AsyncClient(timeout=settings.request_timeout, headers=headers) as client:
+                        response = await self._post_batch_with_retry(client, params, ids)
+                        response.raise_for_status()
+                    data = response.json()
+                    self._write_enrichment_cache(cache_key, data)
+                except Exception as exc:
+                    print(f"[WARN] DBLP metadata enrichment failed: {type(exc).__name__}: {exc}")
+                    continue
+            self._apply_enrichment_batch(batch, data)
+            await asyncio.sleep(1.0)
+        return papers
+
+    def _needs_enrichment(self, paper: Paper) -> bool:
+        return not paper.abstract or paper.citation_count <= 0 or not paper.published_date
+
+    def _semantic_scholar_id(self, paper: Paper) -> str:
+        if paper.doi:
+            return f"DOI:{paper.doi}"
+        return paper.title
+
+    async def _post_batch_with_retry(
+        self,
+        client: httpx.AsyncClient,
+        params: dict[str, Any],
+        ids: list[str],
+    ) -> httpx.Response:
+        last_error: Exception | None = None
+        last_response: httpx.Response | None = None
+        for attempt in range(3):
+            try:
+                response = await client.post(self.semantic_scholar_batch_url, params=params, json={"ids": ids})
+            except httpx.TimeoutException as exc:
+                last_error = exc
+                print(f"[WARN] DBLP enrichment timed out, retrying in {self.retry_wait_seconds:.1f}s ({attempt + 1}/3)")
+                await asyncio.sleep(self.retry_wait_seconds)
+                continue
+            if response.status_code == 429:
+                last_response = response
+                retry_after = self._retry_after_seconds(response)
+                print(f"[WARN] DBLP enrichment got Semantic Scholar 429, retrying in {retry_after:.1f}s ({attempt + 1}/3)")
+                await asyncio.sleep(retry_after)
+                continue
+            if response.status_code in {500, 502, 503, 504}:
+                last_response = response
+                print(
+                    f"[WARN] DBLP enrichment got Semantic Scholar {response.status_code}, "
+                    f"retrying in {self.retry_wait_seconds:.1f}s ({attempt + 1}/3)"
+                )
+                await asyncio.sleep(self.retry_wait_seconds)
+                continue
+            return response
+        if last_response is not None:
+            return last_response
+        if last_error is not None:
+            raise last_error
+        raise RuntimeError("DBLP metadata enrichment failed after retries")
+
+    def _apply_enrichment_batch(self, papers: list[Paper], data: Any) -> None:
+        if not isinstance(data, list):
+            return
+        for paper, item in zip(papers, data):
+            if not isinstance(item, dict):
+                continue
+            external_ids = item.get("externalIds") or {}
+            abstract = self._clean_text(item.get("abstract"))
+            if abstract and not paper.abstract:
+                paper.abstract = abstract
+            if item.get("citationCount") is not None:
+                paper.citation_count = max(paper.citation_count, int(item.get("citationCount") or 0))
+            published = self._parse_semantic_scholar_date(item.get("publicationDate"), item.get("year"))
+            if published and (paper.published_date is None or paper.published_date.month == 1 and paper.published_date.day == 1):
+                paper.published_date = published
+            paper.url = paper.url or self._clean_text(item.get("url")) or ""
+            paper.doi = paper.doi or self._clean_text(external_ids.get("DOI"))
+            paper.venue = paper.venue or self._clean_text(item.get("venue"))
+            paper.extra = {
+                **paper.extra,
+                "metadata_enriched": True,
+                "semantic_scholar_paper_id": self._clean_text(item.get("paperId")),
+                "semantic_scholar_external_ids": external_ids,
+            }
+
+    def _parse_semantic_scholar_date(self, date_text: str | None, year: int | None) -> datetime | None:
+        if date_text:
+            try:
+                return datetime.strptime(date_text, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            except ValueError:
+                pass
+        return self._parse_year(year)
+
+    def _chunks(self, items: list[Paper], size: int) -> list[list[Paper]]:
+        return [items[index : index + size] for index in range(0, len(items), size)]
 
     def _parse_authors(self, authors_info: Any) -> list[str]:
         authors = []
@@ -188,6 +305,12 @@ class DblpFetcher(BaseFetcher):
         cache_dir.mkdir(parents=True, exist_ok=True)
         return cache_dir / f"{digest}.json"
 
+    def _enrichment_cache_path(self, key: str) -> Path:
+        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
+        cache_dir = Path("data/cache/dblp_enrichment")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir / f"{digest}.json"
+
     def _read_cache(self, key: str, ttl_seconds: int) -> dict[str, Any] | None:
         path = self._cache_path(key)
         if not path.exists():
@@ -205,6 +328,24 @@ class DblpFetcher(BaseFetcher):
     def _write_cache(self, key: str, data: dict[str, Any]) -> None:
         payload = {"created_at": datetime.now(timezone.utc).isoformat(), "data": data}
         self._cache_path(key).write_text(json.dumps(payload), encoding="utf-8")
+
+    def _read_enrichment_cache(self, key: str, ttl_seconds: int) -> Any | None:
+        path = self._enrichment_cache_path(key)
+        if not path.exists():
+            return None
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return None
+        created_at = datetime.fromisoformat(payload["created_at"])
+        if datetime.now(timezone.utc) - created_at > timedelta(seconds=ttl_seconds):
+            return None
+        print("[INFO] DBLP using local metadata enrichment cache")
+        return payload.get("data")
+
+    def _write_enrichment_cache(self, key: str, data: Any) -> None:
+        payload = {"created_at": datetime.now(timezone.utc).isoformat(), "data": data}
+        self._enrichment_cache_path(key).write_text(json.dumps(payload), encoding="utf-8")
 
     def _parse_year(self, year: Any) -> datetime | None:
         if not year:

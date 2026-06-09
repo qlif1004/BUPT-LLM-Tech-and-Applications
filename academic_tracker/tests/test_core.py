@@ -27,6 +27,34 @@ def test_relevance_ranker():
     assert ranked[0].title == "RAG for question answering"
 
 
+def test_relevance_ranker_prefers_semantic_embedding_match():
+    class FakeEmbeddingBackend:
+        name = "fake_embedding"
+
+        def embed(self, texts: list[str]) -> list[list[float]]:
+            vectors = []
+            for text in texts:
+                if "large language model inference acceleration" in text:
+                    vectors.append([1.0, 0.0])
+                elif "speculative decoding" in text:
+                    vectors.append([0.98, 0.02])
+                else:
+                    vectors.append([0.0, 1.0])
+            return vectors
+
+    config = TaskConfig(research_direction="large language model inference acceleration", keywords=[])
+    papers = [
+        Paper(title="Dense retrieval with document expansion", abstract="retrieval augmented generation"),
+        Paper(title="SpecBench", abstract="speculative decoding for faster autoregressive generation"),
+    ]
+
+    ranked = RelevanceRanker(embedding_backend=FakeEmbeddingBackend()).rank(papers, config, top_n=1)
+
+    assert ranked[0].title == "SpecBench"
+    assert ranked[0].extra["relevance_ranker"] == "fake_embedding"
+    assert ranked[0].extra["semantic_score"] > ranked[0].extra["lexical_score"]
+
+
 def test_dblp_parse_payload_filters_by_requested_venue():
     fetcher = DblpFetcher()
     config = TaskConfig(
@@ -89,6 +117,39 @@ def test_dblp_requested_venues_merge_sources_and_config():
     venues = fetcher._requested_venues(config)
 
     assert venues == ["CIKM", "SIGIR"]
+
+
+def test_dblp_enrichment_fills_missing_metadata():
+    fetcher = DblpFetcher()
+    paper = Paper(
+        title="GraphCLIP",
+        doi="10.1/graphclip",
+        abstract="",
+        citation_count=0,
+        source="dblp",
+        published_date=datetime(2025, 1, 1, tzinfo=timezone.utc),
+    )
+
+    fetcher._apply_enrichment_batch(
+        [paper],
+        [
+            {
+                "paperId": "s2-graphclip",
+                "abstract": "This paper studies graph and language representation learning.",
+                "citationCount": 17,
+                "publicationDate": "2025-05-12",
+                "url": "https://www.semanticscholar.org/paper/s2-graphclip",
+                "externalIds": {"DOI": "10.1/graphclip"},
+                "venue": "WWW",
+            }
+        ],
+    )
+
+    assert paper.abstract == "This paper studies graph and language representation learning."
+    assert paper.citation_count == 17
+    assert paper.published_date == datetime(2025, 5, 12, tzinfo=timezone.utc)
+    assert paper.extra["metadata_enriched"] is True
+    assert paper.extra["semantic_scholar_paper_id"] == "s2-graphclip"
 
 
 def test_report_comparison_marks_first_report_as_new():
