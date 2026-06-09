@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ research_direction }} - Academic Tracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
+  </head>
+  <body class="report-page">
+    <main class="page-shell">
+      <section class="report-hero">
+        <a class="back-link" href="/">返回控制台</a>
+        <p class="eyebrow">Report #{{ report_id }}</p>
+        <h1>{{ research_direction }}</h1>
+        <p class="muted">生成时间：{{ created_at }}</p>
+      </section>
+
+      <section class="panel report-layout">
+        <article class="markdown-body">{{ report_html | safe }}</article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>原始 Markdown</h2>
+          <p>保留系统现有的 Markdown 报告输出格式。</p>
+        </div>
+        <pre class="raw-markdown">{{ markdown }}</pre>
+      </section>
+    </main>
+  </body>
+  </html>

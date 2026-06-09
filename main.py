@@ -307,6 +307,14 @@ def init_env_file(api_key: str | None = None) -> None:
     console.print("已创建 .env。请确认其中的 DEEPSEEK_API_KEY。")
 
 
+def start_web_ui(host: str = "127.0.0.1", port: int = 8000) -> None:
+    from academic_tracker.web.app import create_app
+    import uvicorn
+
+    console.print(f"Web 界面启动中：http://{host}:{port}")
+    uvicorn.run(create_app(), host=host, port=port)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="学术论文自动追踪与简报生成 Agent")
     subparsers = parser.add_subparsers(dest="command")
@@ -327,6 +335,10 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("reports", help="查看历史报告")
     subparsers.add_parser("scheduler", help="启动常驻定时调度服务")
     subparsers.add_parser("ui", help="打开 Agent Console，自然语言和命令式混合交互")
+
+    web_parser = subparsers.add_parser("web", help="启动 Web 控制台")
+    web_parser.add_argument("--host", default="127.0.0.1", help="Web 服务监听地址")
+    web_parser.add_argument("--port", type=int, default=8000, help="Web 服务监听端口")
 
     init_parser = subparsers.add_parser("init-env", help="创建 .env 配置文件")
     init_parser.add_argument("--api-key", default=None, help="DeepSeek API Key，不建议在共享终端历史中使用")
@@ -363,6 +375,9 @@ def main() -> None:
         return
     if args.command == "ui":
         open_interactive_ui()
+        return
+    if args.command == "web":
+        start_web_ui(host=args.host, port=args.port)
         return
     parser.print_help()
 

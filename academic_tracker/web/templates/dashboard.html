@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Academic Tracker Web UI</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}">
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Academic Tracker Agent</p>
+          <h1>学术论文自动追踪与研究简报生成平台</h1>
+          <p class="hero-copy">
+            输入自然语言研究需求，即可生成论文追踪报告、创建周期任务，并查看历史运行与报告记录。
+          </p>
+        </div>
+        <div class="hero-card">
+          <p><strong>已恢复任务：</strong> {{ restored_jobs }}</p>
+          <p><strong>当前调度中：</strong> {{ jobs|length }}</p>
+          <p class="muted">可在下方创建新任务，或直接执行已有任务。</p>
+        </div>
+      </section>
+
+      <section class="grid two-up">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>立即运行</h2>
+            <p>输入自然语言需求，直接生成报告。</p>
+          </div>
+          <form id="run-form" class="stack-form">
+            <label for="run-query">研究需求</label>
+            <textarea id="run-query" name="query" rows="6" placeholder="例如：帮我追踪最近三个月 graph foundation model 方向的论文，关注 arXiv cs.LG、dblp:WWW 和 Semantic Scholar，每类给我 5 篇。"></textarea>
+            <button type="submit">生成报告</button>
+            <p id="run-status" class="status-line"></p>
+          </form>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2>创建周期任务</h2>
+            <p>保持自然语言输入方式，同时支持手动覆盖调度表达式。</p>
+          </div>
+          <form id="task-form" class="stack-form">
+            <label for="task-query">周期任务需求</label>
+            <textarea id="task-query" name="query" rows="4" placeholder="例如：每周一 08:00 追踪 RAG 和长上下文推理方向的最新论文。"></textarea>
+            <label for="schedule-override">调度覆盖，可选</label>
+            <input id="schedule-override" name="schedule_override" type="text" placeholder="weekly mon 08:00 或 cron: 0 8 * * mon">
+            <button type="submit">保存任务</button>
+            <p id="task-status" class="status-line"></p>
+          </form>
+        </article>
+      </section>
+
+      <section id="run-result" class="panel result-panel hidden">
+        <div class="panel-head">
+          <h2>本次结果</h2>
+          <p>左侧查看解析配置，右侧查看渲染后的 Markdown 报告。</p>
+        </div>
+        <div class="result-grid">
+          <div class="code-block">
+            <h3>解析配置</h3>
+            <pre id="result-config"></pre>
+          </div>
+          <div class="report-block">
+            <div class="report-actions">
+              <a id="result-report-link" href="#" target="_blank" rel="noreferrer">打开独立报告页</a>
+              <span id="result-report-path" class="muted"></span>
+            </div>
+            <article id="result-report" class="markdown-body"></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid three-up">
+        <article class="panel">
+          <div class="panel-head">
+            <h2>最近任务</h2>
+            <p>支持直接从 Web 页触发已保存任务。</p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>方向</th>
+                  <th>调度</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for task in tasks %}
+                <tr>
+                  <td>#{{ task.id }}</td>
+                  <td>{{ task.research_direction }}</td>
+                  <td>{{ task.schedule }}</td>
+                  <td><button type="button" class="ghost-button" data-task-run="{{ task.id }}">立即执行</button></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="empty">暂无任务</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2>最近运行日志</h2>
+            <p>和现有数据库中的运行记录保持一致。</p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>任务</th>
+                  <th>状态</th>
+                  <th>开始时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for log in logs %}
+                <tr>
+                  <td>#{{ log.task_id }}</td>
+                  <td><span class="status-chip status-{{ log.status }}">{{ log.status }}</span></td>
+                  <td>{{ log.started_at }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" class="empty">暂无日志</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <h2>最近报告</h2>
+            <p>支持查看数据库中已保存的 Markdown 报告。</p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>方向</th>
+                  <th>查看</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for report in reports %}
+                <tr>
+                  <td>#{{ report.id }}</td>
+                  <td>{{ report.research_direction }}</td>
+                  <td><a href="/reports/{{ report.id }}">打开</a></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" class="empty">暂无报告</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      const runForm = document.getElementById("run-form");
+      const taskForm = document.getElementById("task-form");
+      const runStatus = document.getElementById("run-status");
+      const taskStatus = document.getElementById("task-status");
+      const resultPanel = document.getElementById("run-result");
+      const resultConfig = document.getElementById("result-config");
+      const resultReport = document.getElementById("result-report");
+      const resultReportLink = document.getElementById("result-report-link");
+      const resultReportPath = document.getElementById("result-report-path");
+
+      runForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const query = document.getElementById("run-query").value.trim();
+        if (!query) {
+          runStatus.textContent = "请输入研究需求。";
+          return;
+        }
+
+        runStatus.textContent = "正在解析任务并生成报告，这可能需要一点时间...";
+        try {
+          const response = await fetch("/api/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.detail || "生成报告失败");
+          }
+
+          resultPanel.classList.remove("hidden");
+          resultConfig.textContent = JSON.stringify(payload.config, null, 2);
+          resultReport.innerHTML = payload.report_html;
+          resultReportLink.href = `/reports/${payload.report_id}`;
+          resultReportPath.textContent = payload.report_path;
+          runStatus.textContent = "报告已生成。";
+          window.scrollTo({ top: resultPanel.offsetTop - 24, behavior: "smooth" });
+        } catch (error) {
+          runStatus.textContent = error.message;
+        }
+      });
+
+      taskForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const query = document.getElementById("task-query").value.trim();
+        const scheduleOverride = document.getElementById("schedule-override").value.trim();
+        if (!query) {
+          taskStatus.textContent = "请输入周期任务需求。";
+          return;
+        }
+
+        taskStatus.textContent = "正在保存任务...";
+        try {
+          const response = await fetch("/api/tasks", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query, schedule_override: scheduleOverride || null }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.detail || "保存任务失败");
+          }
+
+          taskStatus.textContent = `任务 #${payload.task_id} 已保存，页面即将刷新。`;
+          window.setTimeout(() => window.location.reload(), 700);
+        } catch (error) {
+          taskStatus.textContent = error.message;
+        }
+      });
+
+      document.querySelectorAll("[data-task-run]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const taskId = button.getAttribute("data-task-run");
+          button.disabled = true;
+          button.textContent = "执行中...";
+          try {
+            const response = await fetch(`/api/tasks/${taskId}/run`, { method: "POST" });
+            const payload = await response.json();
+            if (!response.ok) {
+              throw new Error(payload.detail || "执行任务失败");
+            }
+
+            resultPanel.classList.remove("hidden");
+            resultConfig.textContent = JSON.stringify(payload.config, null, 2);
+            resultReport.innerHTML = payload.report_html;
+            if (payload.report_id) {
+              resultReportLink.href = `/reports/${payload.report_id}`;
+            }
+            resultReportPath.textContent = payload.report_path;
+            window.scrollTo({ top: resultPanel.offsetTop - 24, behavior: "smooth" });
+          } catch (error) {
+            alert(error.message);
+          } finally {
+            button.disabled = false;
+            button.textContent = "立即执行";
+          }
+        });
+      });
+    </script>
+  </body>
+  </html>

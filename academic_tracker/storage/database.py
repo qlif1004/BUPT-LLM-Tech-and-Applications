@@ -134,6 +134,10 @@ class Database:
         with self.SessionLocal() as session:
             return list(session.query(ReportRecord).order_by(ReportRecord.created_at.desc()).limit(limit))
 
+    def get_report_record(self, report_id: int) -> ReportRecord | None:
+        with self.SessionLocal() as session:
+            return session.get(ReportRecord, report_id)
+
     def start_task_run(self, task_id: int) -> int:
         with self.SessionLocal() as session:
             record = TaskRunRecord(task_id=task_id, status="running")
