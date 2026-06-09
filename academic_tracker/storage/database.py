@@ -106,6 +106,15 @@ class Database:
                 scheduled_records.append(record)
         return scheduled_records
 
+    def delete_task_config(self, task_id: int) -> bool:
+        with self.SessionLocal() as session:
+            record = session.get(TaskConfigRecord, task_id)
+            if not record:
+                return False
+            session.delete(record)
+            session.commit()
+            return True
+
     def save_papers(self, papers: list[Paper]) -> None:
         with self.SessionLocal() as session:
             for paper in papers:
@@ -129,6 +138,19 @@ class Database:
             session.commit()
             session.refresh(record)
             return record.id
+
+    def get_report(self, report_id: int) -> ReportRecord | None:
+        with self.SessionLocal() as session:
+            return session.get(ReportRecord, report_id)
+
+    def delete_report(self, report_id: int) -> bool:
+        with self.SessionLocal() as session:
+            record = session.get(ReportRecord, report_id)
+            if not record:
+                return False
+            session.delete(record)
+            session.commit()
+            return True
 
     def list_reports(self, limit: int = 10) -> list[ReportRecord]:
         with self.SessionLocal() as session:

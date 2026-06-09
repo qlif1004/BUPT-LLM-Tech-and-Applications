@@ -11,11 +11,51 @@ from rich.panel import Panel
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 
+from academic_tracker.agent.nl_router import NLRouter
 from academic_tracker.storage.database import get_database
 from academic_tracker.storage.models import TaskConfig
 from academic_tracker.utils.formatting import save_markdown_report
 
 console = Console()
+_nl_router = NLRouter()
+
+
+def _modify_config_interactive(config: TaskConfig) -> TaskConfig:
+    """交互式修改任务配置，返回修改后的配置。"""
+    config_dict = config.model_dump()
+
+    fields = [
+        ("research_direction", "研究方向", "str"),
+        ("keywords",        "关键词（逗号分隔）", "list"),
+        ("sources",         "数据源（逗号分隔）", "list"),
+        ("time_range_days", "时间范围（天）", "int"),
+        ("schedule",        "定时规则", "str"),
+        ("categories",      "排序类别（latest/popular/relevant）", "list"),
+        ("top_n_per_category", "每类 Top N", "int"),
+        ("venues",          "会议/期刊过滤（逗号分隔）", "list"),
+    ]
+
+    while True:
+        table = Table(title="当前任务配置", show_header=True, header_style="bold cyan")
+        table.add_column("#", justify="right")
+        table.add_column("字段")
+        table.add_column("当前值")
+        for i, (key, label, _) in enumerate(fields, 1):
+            value = config_dict[key]
+            display = ", ".join(value) if isinstance(value, list) else str(value)
+            table.add_row(str(i), label, display)
+        console.print(table)
+        console.print("\n输入字段编号修改对应项，或输入 [bold]done[/bold] 完成修改", markup=True)
+        choice = Prompt.ask("请选择", default="done").strip()
+        if choice.lower() in ("done", "q", ""):
+            break
+        idx = _parse_field_index(choice, len(fields))
+        if idx is None:
+            continue
+        key, label, field_type = fields[idx]
+        config_dict = _apply_field_edit(config_dict, key, label, field_type)
+
+    return config.model_copy(update=config_dict)
 
 
 async def run_once(user_text: str, assume_yes: bool = False) -> None:
@@ -23,10 +63,19 @@ async def run_once(user_text: str, assume_yes: bool = False) -> None:
 
     agent = AcademicTrackerAgent()
     config = await agent.parse_task(user_text)
-    console.print(Panel.fit(config.model_dump_json(indent=2), title="解析得到的任务配置"))
-    if not assume_yes and not Confirm.ask("是否按该配置立即获取论文并生成简报？", default=True):
-        console.print("已取消执行。")
-        return
+
+    while True:
+        console.print(Panel.fit(config.model_dump_json(indent=2), title="解析得到的任务配置"))
+        if assume_yes:
+            break
+        choice = Prompt.ask("请选择操作", choices=["execute", "modify", "cancel"], default="execute")
+        if choice == "execute":
+            break
+        if choice == "cancel":
+            console.print("已取消执行。")
+            return
+        config = _modify_config_interactive(config)
+
     with console.status("正在获取论文、排序并生成简报..."):
         report = await agent.run(config)
     path = save_markdown_report(report.markdown, config.research_direction)
@@ -42,11 +91,21 @@ async def add_scheduled_task(user_text: str | None = None, assume_yes: bool = Fa
     scheduler = TaskScheduler(agent=agent, db=agent.db)
     query = user_text or Prompt.ask("请输入你的周期论文追踪需求")
     config = await agent.parse_task(query)
-    config = _ensure_schedulable_config(config)
-    console.print(Panel.fit(config.model_dump_json(indent=2), title="将保存的定时任务配置"))
-    if not assume_yes and not Confirm.ask("是否保存该定时任务？", default=True):
-        console.print("已取消保存。")
-        return
+
+    while True:
+        console.print(Panel.fit(config.model_dump_json(indent=2), title="将保存的定时任务配置"))
+        if assume_yes:
+            config = _ensure_schedulable_config(config)
+            break
+        choice = Prompt.ask("请选择操作", choices=["save", "modify", "cancel"], default="save")
+        if choice == "save":
+            config = _ensure_schedulable_config(config)
+            break
+        if choice == "cancel":
+            console.print("已取消保存。")
+            return
+        config = _modify_config_interactive(config)
+
     task_id = scheduler.create_task(config)
     from academic_tracker.scheduler.task_scheduler import schedule_to_trigger
 
@@ -181,7 +240,70 @@ def _handle_agent_command(user_text: str) -> bool:
         run_task_now(task_id)
         return False
 
-    asyncio.run(run_once(normalized))
+    # ── fall through to NL router for any unmatched input ──
+    return asyncio.run(_handle_nl_command(normalized))
+
+
+async def _handle_nl_command(user_text: str) -> bool:
+    """路由自然语言指令到对应的系统功能。返回 True 表示应退出交互循环。"""
+    result = await _nl_router.route(user_text)
+
+    if result.message:
+        console.print(f"[dim]{result.message}[/dim]")
+
+    if result.intent == "search":
+        query = result.params.get("query", user_text)
+        await run_once(query)
+
+    elif result.intent == "schedule":
+        query = result.params.get("query", user_text)
+        await add_scheduled_task(query)
+
+    elif result.intent == "list_tasks":
+        print_task_list()
+
+    elif result.intent == "trigger_task":
+        task_id = result.params.get("task_id")
+        if task_id is None:
+            task_id = IntPrompt.ask("请输入要触发的任务 ID")
+        run_task_now(task_id)
+
+    elif result.intent == "view_logs":
+        task_id = result.params.get("task_id")
+        print_run_logs(task_id)
+
+    elif result.intent == "view_reports":
+        limit = result.params.get("limit")
+        print_reports(limit if limit else 10)
+
+    elif result.intent == "start_scheduler":
+        start_scheduler_service()
+
+    elif result.intent == "help":
+        _print_agent_help()
+
+    elif result.intent == "exit":
+        console.print("会话已结束。")
+        return True
+
+    elif result.intent == "unrelated":
+        console.print(
+            Panel.fit(
+                "本系统是一个 [bold]学术论文自动追踪与简报生成 Agent[/bold]。\n\n"
+                "你可以用自然语言告诉我：\n"
+                "• 想追踪的研究方向，我会立即搜索论文并生成简报\n"
+                "• 创建定时追踪任务，我会定期自动帮你关注最新进展\n"
+                "• 查看已保存的任务、运行日志和历史报告\n\n"
+                "示例：追踪最近一个月多模态大语言模型推理优化的高影响论文",
+                title="系统功能简介",
+                border_style="cyan",
+            )
+        )
+
+    else:
+        # fallback: treat as search
+        await run_once(user_text)
+
     return False
 
 
@@ -328,9 +450,49 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("scheduler", help="启动常驻定时调度服务")
     subparsers.add_parser("ui", help="打开 Agent Console，自然语言和命令式混合交互")
 
+    nl_parser = subparsers.add_parser("nl", help="自然语言指令路由（自动识别意图并执行）")
+    nl_parser.add_argument("query", nargs="?", help="任意自然语言指令")
+
     init_parser = subparsers.add_parser("init-env", help="创建 .env 配置文件")
     init_parser.add_argument("--api-key", default=None, help="DeepSeek API Key，不建议在共享终端历史中使用")
     return parser
+
+
+def _parse_field_index(choice: str, field_count: int) -> int | None:
+    try:
+        idx = int(choice) - 1
+    except ValueError:
+        console.print(f"[yellow]无效输入：{choice}[/yellow]")
+        return None
+    if 0 <= idx < field_count:
+        return idx
+    console.print(f"[yellow]编号超出范围（1-{field_count}）[/yellow]")
+    return None
+
+
+def _apply_field_edit(
+    config_dict: dict, key: str, label: str, field_type: str
+) -> dict:
+    current = config_dict[key]
+    current_display = ", ".join(current) if isinstance(current, list) else str(current)
+    new_raw = Prompt.ask(f"输入新的 {label}", default=current_display).strip()
+
+    if field_type == "list":
+        config_dict[key] = [v.strip() for v in new_raw.split(",") if v.strip()]
+    elif field_type == "int":
+        try:
+            config_dict[key] = int(new_raw)
+        except ValueError:
+            console.print(f"[yellow]'{new_raw}' 不是有效整数，保持原值 {current}[/yellow]")
+    else:
+        config_dict[key] = new_raw
+
+    # Re-validate through TaskConfig to trigger validators like normalize_categories
+    try:
+        validated = TaskConfig.model_validate(config_dict)
+        return validated.model_dump()
+    except Exception:
+        return config_dict
 
 
 def main() -> None:
@@ -363,6 +525,10 @@ def main() -> None:
         return
     if args.command == "ui":
         open_interactive_ui()
+        return
+    if args.command == "nl":
+        query = args.query or Prompt.ask("请输入你的自然语言指令")
+        asyncio.run(_handle_nl_command(query))
         return
     parser.print_help()
 

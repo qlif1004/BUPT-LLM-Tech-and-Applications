@@ -23,6 +23,7 @@ env/
 
 # Local data, caches, and generated databases
 data/
+reports/
 *.db
 *.sqlite
 *.sqlite3
