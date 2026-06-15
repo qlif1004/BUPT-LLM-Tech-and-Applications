@@ -21,6 +21,8 @@ class IntentParser:
                     "字段包括：research_direction(str), keywords(list[str]), sources(list[str]), "
                     "time_range_days(int), schedule(str), categories(list[str]), "
                     "top_n_per_category(int), venues(list[str])。"
+                    "你可以联想与用户直接提到的关键词相关但可能未被用户明确提到的其他重要技术术语或研究关键词，并把它们补充进 keywords 字段。"
+                    "关键词需同时包含中文和英文版本，如果 keywords 字段只包含某个关键词的中文或英文，请补充其对应的翻译。"
                     "categories 只能从 latest、popular、relevant 三个英文值中选择。"
                     "如果用户说每类、三类或没有明确限制，就输出 "
                     "[\"latest\", \"popular\", \"relevant\"]。"

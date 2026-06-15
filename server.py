@@ -174,7 +174,7 @@ async def _execute_intent(result: RouteResult, user_text: str) -> str:
     elif intent == "schedule":
         query = result.params.get("query", user_text)
         config = await _agent.parse_task(query)
-        config = _ensure_schedulable_web(config, result)
+        config = _ensure_schedulable_web(config)
         scheduler = TaskScheduler(agent=_agent, db=_db)
         task_id = scheduler.create_task(config)
         trigger = schedule_to_trigger(config.schedule)
@@ -268,7 +268,7 @@ async def _execute_intent(result: RouteResult, user_text: str) -> str:
         return await _execute_intent(RouteResult(intent="search", params={"query": user_text}), user_text)
 
 
-def _ensure_schedulable_web(config: TaskConfig, result: RouteResult) -> TaskConfig:
+def _ensure_schedulable_web(config: TaskConfig) -> TaskConfig:
     """Web version: auto-assign a default schedule instead of prompting."""
     if config.schedule and config.schedule.lower() != "manual" and schedule_to_trigger(config.schedule):
         return config
